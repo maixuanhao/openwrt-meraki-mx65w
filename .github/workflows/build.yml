@@ -54,6 +54,10 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
+    - name: 🚀 BƯỚC TẠM DỪNG: SSH kết nối máy ảo để kiểm tra
+      uses: mxschmitt/action-tmate@v3
+      timeout-minutes: 60  # Giới hạn chờ bạn SSH trong tối đa 60 phút, quá 60 phút sẽ tự hủy để tránh tốn tài nguyên
+
     - name: 6. Tải trước các gói phụ thuộc (Pre-download)
       id: package
       run: |
@@ -89,6 +93,4 @@ jobs:
         tag_name: Meraki-MX65W-${{ env.FILE_DATE }}
         body: |
           Firmware OpenWrt Full chức năng cho Cisco Meraki MX65W đã biên dịch xong.
-          - Core: OpenWrt 23.05
-          - Tích hợp: Tiếng Việt, Docker, AdGuardHome, OpenClash, PassWall, Samba4 NAS, TTYD...
         files: ${{ env.FIRMWARE }}/*
