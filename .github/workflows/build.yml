@@ -9,8 +9,6 @@ env:
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
   TZ: Asia/Ho_Chi_Minh
 
 jobs:
@@ -26,23 +24,18 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-        sudo docker image prune --all --force
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         sudo timedatectl set-timezone "$TZ"
-        sudo mkdir -p /workdir
-        sudo chown $USER:$GROUPS /workdir
 
     - name: 3. Tải mã nguồn gốc OpenWrt Core
-      working-directory: /workdir
       run: |
         git clone $REPO_URL -b $REPO_BRANCH openwrt
-        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: 4. Nạp Feeds ngoài và Cập nhật gói phần mềm
       run: |
-        chmod +x $DIY_P1_SH
         cd openwrt
+        chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
         $GITHUB_WORKSPACE/$DIY_P1_SH
         ./scripts/feeds update -a
         ./scripts/feeds install -a
@@ -50,47 +43,21 @@ jobs:
     - name: 5. Khớp cấu hình phần cứng (.config) và chạy Script cấu hình mạng
       run: |
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P2_SH
         cd openwrt
+        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
     - name: 🚀 BƯỚC TẠM DỪNG: SSH kết nối máy ảo để kiểm tra
       uses: mxschmitt/action-tmate@v3
-      timeout-minutes: 60  # Giới hạn chờ bạn SSH trong tối đa 60 phút, quá 60 phút sẽ tự hủy để tránh tốn tài nguyên
+      timeout-minutes: 60
 
     - name: 6. Tải trước các gói phụ thuộc (Pre-download)
-      id: package
       run: |
         cd openwrt
         make defconfig
         make download -j8
-        find dl -size -1024c -exec rm -f {} \;
 
-    - name: 7. Tiến hành biên dịch Firmware (Sử dụng luồng CPU cao nhất)
-      id: compile
+    - name: 7. Tiến hành biên dịch Firmware
       run: |
         cd openwrt
-        echo -e "$(nproc) luồng CPU bắt đầu hoạt động để dịch code..."
         make -j$(nproc) || make -j1 V=s
-        echo "status=success" >> $GITHUB_OUTPUT
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
-    - name: 8. Phân loại cấu trúc file đầu ra
-      id: organize
-      if: steps.compile.outputs.status == 'success' && !cancelled()
-      run: |
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: 9. Tạo và đẩy file lên Bản phát hành GitHub Release công khai
-      uses: softprops/action-gh-release@v2
-      if: steps.organize.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: Meraki-MX65W-${{ env.FILE_DATE }}
-        body: |
-          Firmware OpenWrt Full chức năng cho Cisco Meraki MX65W đã biên dịch xong.
-        files: ${{ env.FIRMWARE }}/*
