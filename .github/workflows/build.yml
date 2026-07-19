@@ -1,4 +1,4 @@
-name: Meraki MX65W Full-Feature Builder
+name: Meraki MX65W Toolchain Builder
 
 on:
   workflow_dispatch:
@@ -6,9 +6,6 @@ on:
 env:
   REPO_URL: https://github.com/openwrt/openwrt
   REPO_BRANCH: openwrt-23.05
-  CONFIG_FILE: .config
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
   TZ: Asia/Ho_Chi_Minh
 
 jobs:
@@ -16,10 +13,10 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-    - name: 1. Đọc mã nguồn từ Repo cá nhân
+    - name: 1. Đọc mã nguồn Repo
       uses: actions/checkout@v4
 
-    - name: 2. Cài đặt các thư viện biên dịch Linux
+    - name: 2. Cài đặt các thư viện Linux biên dịch
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
@@ -32,32 +29,20 @@ jobs:
       run: |
         git clone $REPO_URL -b $REPO_BRANCH openwrt
 
-    - name: 4. Nạp Feeds ngoài và Cập nhật gói phần mềm
+    - name: 4. Cập nhật gói phần mềm Feeds
       run: |
         cd openwrt
-        chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
-        $GITHUB_WORKSPACE/$DIY_P1_SH
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: 5. Khớp cấu hình phần cứng (.config) và chạy Script cấu hình mạng
+    - name: 5. Khởi tạo cấu hình mặc định phần cứng
       run: |
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         cd openwrt
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-        $GITHUB_WORKSPACE/$DIY_P2_SH
+        echo "CONFIG_TARGET_ipq806x=y" > .config
+        echo "CONFIG_TARGET_ipq806x_generic=y" >> .config
+        echo "CONFIG_TARGET_ipq806x_generic_DEVICE_meraki_mx65w=y" >> .config
+        make defconfig
 
     - name: 🚀 BƯỚC TẠM DỪNG: SSH kết nối máy ảo để kiểm tra
       uses: mxschmitt/action-tmate@v3
       timeout-minutes: 60
-
-    - name: 6. Tải trước các gói phụ thuộc (Pre-download)
-      run: |
-        cd openwrt
-        make defconfig
-        make download -j8
-
-    - name: 7. Tiến hành biên dịch Firmware
-      run: |
-        cd openwrt
-        make -j$(nproc) || make -j1 V=s
